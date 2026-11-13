@@ -1,0 +1,57 @@
+name: Compilar APK Panel Energia BT
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+
+      - name: Generar estructura base Android
+        run: |
+          flutter create . --project-name panel_energia_bt --platforms=android
+          rm -rf test
+
+      - name: Aplicar permisos Bluetooth y parches de compatibilidad
+        run: |
+          cp config_android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cat << 'EOF' >> android/build.gradle
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      if (project.android.namespace == null) {
+                          project.android.namespace = project.group.toString()
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Instalar dependencias y parchar plugin Bluetooth
+        run: |
+          flutter pub get
+          find ~/.pub-cache -name "AndroidManifest.xml" -path "*flutter_bluetooth_serial*" -exec sed -i 's/package="io.github.edufolly.flutterbluetoothserial"//g' {} +
+
+      - name: Compilar APK Release
+        run: flutter build apk --release
+
+      - name: Subir APK generado
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-energia-bt-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
